@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from collections import Counter
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 from keras.models import load_model
 
@@ -34,19 +34,20 @@ async def health_check(request: Request):
         return Response(status_code=200)
     return {"status": "online"}
 # --- 3. Gemini API Setup ---
-load_dotenv() 
+load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+client = None
+gemini_model = "gemini-2.5-flash"
+
 if not GEMINI_API_KEY:
-    print("CRITICAL ERROR: GEMINI_API_KEY not found in .env file.")
+    print("WARNING: GEMINI_API_KEY not found.")
 else:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=GEMINI_API_KEY)
         print("Gemini API configured successfully.")
     except Exception as e:
-        print(f"CRITICAL ERROR: Failed to configure Gemini API: {e}")
-        gemini_model = None
+        print(f"Gemini API configuration failed: {e}")
 
 # --- 4. Define Input Data Models ---
 class CosmicFeatures(BaseModel):
@@ -188,12 +189,12 @@ async def predict(features: CosmicFeatures):
         "input_features": features.dict()
     }
 
-# --- 7. Gemini Explanation Endpoint (Unchanged) ---
+# --- 7. Gemini Explanation Endpoint ---
 @app.post("/get_explanation")
 async def get_gemini_explanation(request: ExplanationRequest):
-    if not gemini_model:
-        return {"error": "Gemini model is not initialized. Check API key."}
-    
+    if client is None:
+        return {"error": "Gemini API is not initialized. Check the API key."}
+
     try:
         prompt = f"""
         You are an expert astronomer and data scientist.
@@ -204,17 +205,26 @@ async def get_gemini_explanation(request: ExplanationRequest):
 
         Please provide a detailed, two-paragraph explanation for this result,
         formatted for a web UI (use newlines).
-        
-        Paragraph 1: Start by clearly explaining what a "{request.prediction}" is
-        in simple astronomical terms (e.g., "A QSO, or Quasi-Stellar Object, is...").
-        
-        Paragraph 2: Explain what this specific prediction means. Why might the 
-        models have reached this consensus with {request.confidence * 100:.2f}% confidence?
-        What makes it different from the other classes (STAR, GALAXY, QSO)?
-        
+
+        Paragraph 1: Explain what "{request.prediction}" means
+        in simple astronomical terms.
+
+        Paragraph 2: Explain what this prediction means and why the
+        models might have reached this consensus with
+        {request.confidence * 100:.2f}% confidence. Explain how it
+        differs from STAR, GALAXY, and QSO.
+
         Keep the tone professional, informative, and accessible.
         """
-        response = gemini_model.generate_content(prompt)
+
+        response = client.models.generate_content(
+            model=gemini_model,
+            contents=prompt,
+        )
+
+        if not response.text:
+            return {"error": "Gemini returned an empty explanation."}
+
         return {"explanation": response.text}
 
     except Exception as e:
