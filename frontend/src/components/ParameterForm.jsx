@@ -44,7 +44,7 @@ export default function ParameterForm({ setIsLoading, setApiResult, setPredictio
     setIsLoading(true);
     setApiResult(null); 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/predict', formData);
+      const response = await axios.post('https://nebulalens-core.onrender.com/predict', formData);
       setApiResult(response.data); 
       
       // --- NEW: Add successful result to the log ---

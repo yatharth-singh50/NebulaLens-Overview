@@ -250,7 +250,7 @@ export default function ResultCard({ predictions, modelAgreement, isLoading }) {
         setXaiError(null);
         setExplanation(null);
         try {
-          const response = await axios.post('http://127.0.0.1:8000/get_explanation', {
+          const response = await axios.post('https://nebulalens-core.onrender.com/get_explanation', {
             prediction: modelAgreement.prediction,
             confidence: modelAgreement.confidence, 
           });
